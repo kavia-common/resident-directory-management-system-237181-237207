@@ -4,6 +4,7 @@ Uses SQLAlchemy with PostgreSQL via environment variables for configuration.
 Environment variables are loaded from a .env file via python-dotenv.
 """
 import os
+import logging
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -12,26 +13,48 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # Load environment variables from .env (no-op if already set in the environment)
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # -------------------------------------------------------------------------
 # Build the database URL from environment variables.
-# Required vars: POSTGRES_URL, POSTGRES_USER, POSTGRES_PASSWORD,
-#                POSTGRES_DB, POSTGRES_PORT
+#
+# POSTGRES_URL may be:
+#   (a) A full connection string: "postgresql://user:pass@host:port/dbname"
+#       or "postgresql://host:port/dbname" — use it directly.
+#   (b) Just a hostname or IP address: "localhost" or "db.example.com"
+#       — build the full URL from the individual component env vars.
+#
+# Required component vars (used when POSTGRES_URL is a hostname only):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT
+#
 # These are set externally; do NOT hard-code credentials here.
-# Falls back to the seed-data defaults for local development only.
 # -------------------------------------------------------------------------
-POSTGRES_URL = os.getenv("POSTGRES_URL") or "localhost"
-POSTGRES_USER = os.getenv("POSTGRES_USER") or "appuser"
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD") or "dbuser123"
-POSTGRES_DB = os.getenv("POSTGRES_DB") or "myapp"
-POSTGRES_PORT = os.getenv("POSTGRES_PORT") or "5000"
 
-# Strip any surrounding whitespace that might sneak in from the env file
-POSTGRES_PORT = POSTGRES_PORT.strip()
+POSTGRES_URL = os.getenv("POSTGRES_URL") or ""
 
-DATABASE_URL = (
-    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
-    f"@{POSTGRES_URL}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
+# Determine whether POSTGRES_URL is already a complete connection string
+_is_full_url = POSTGRES_URL.startswith("postgresql://") or POSTGRES_URL.startswith("postgres://")
+
+if _is_full_url:
+    # Use the provided full DSN directly
+    DATABASE_URL = POSTGRES_URL
+    logger.debug("Using POSTGRES_URL as a full connection string.")
+else:
+    # Build the DSN from individual component variables
+    _user = os.getenv("POSTGRES_USER") or "appuser"
+    _password = os.getenv("POSTGRES_PASSWORD") or "dbuser123"
+    _db = os.getenv("POSTGRES_DB") or "myapp"
+    _host = POSTGRES_URL or "localhost"
+
+    # POSTGRES_PORT may be empty/whitespace; fall back to the standard PostgreSQL port
+    _raw_port = os.getenv("POSTGRES_PORT") or ""
+    _port = _raw_port.strip() or "5432"
+
+    DATABASE_URL = (
+        f"postgresql://{_user}:{_password}"
+        f"@{_host}:{_port}/{_db}"
+    )
+    logger.debug("Built DATABASE_URL from component env vars (host=%s, port=%s, db=%s).", _host, _port, _db)
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
