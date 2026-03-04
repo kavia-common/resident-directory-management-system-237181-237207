@@ -46,9 +46,9 @@ else:
     _db = os.getenv("POSTGRES_DB") or "myapp"
     _host = POSTGRES_URL or "localhost"
 
-    # POSTGRES_PORT may be empty/whitespace; fall back to the standard PostgreSQL port
+    # POSTGRES_PORT may be empty/whitespace; fall back to the database container port
     _raw_port = os.getenv("POSTGRES_PORT") or ""
-    _port = _raw_port.strip() or "5432"
+    _port = _raw_port.strip() or "5000"
 
     DATABASE_URL = (
         f"postgresql://{_user}:{_password}"
